@@ -698,7 +698,7 @@ def obfuscation_process(source_dir, dest_dir, license_path, requirements_path, q
 
 
         # 5. Obfuscate with PyArmor
-        all_scripts = glob.glob(os.path.join(source_dir, '*.py'))
+        all_scripts = glob.glob(os.path.join(source_dir, '**', '*.py'), recursive=True)
         if not all_scripts:
             raise FileNotFoundError("No Python files in source.")
 
@@ -712,13 +712,17 @@ def obfuscation_process(source_dir, dest_dir, license_path, requirements_path, q
         # 6. Create Launchers
         queue_obj.put("--- Creating .bat Launchers ---\n")
         for script_path in all_scripts:
-            script_name = os.path.basename(script_path)
-            bat_path = os.path.join(dest_dir, f"{os.path.splitext(script_name)[0]}.bat")
+            relative_path = os.path.relpath(script_path, source_dir)
+
+            launcher_name = os.path.splitext(relative_path.replace(os.path.sep, '_'))[0]
+            bat_path = os.path.join(dest_dir, f"{launcher_name}.bat")
+
+            obfuscated_script_path = os.path.join("obfuscated", relative_path).replace(os.path.sep, '\\')
 
             launcher_content = f'''@echo off
 setlocal
-echo Running: "%~dp0{PYTHON_DIR_NAME}\\python.exe" "%~dp0obfuscated\\{script_name}" %*
-"%~dp0{PYTHON_DIR_NAME}\\python.exe" "%~dp0obfuscated\\{script_name}" %*
+echo Running: "%~dp0{PYTHON_DIR_NAME}\\python.exe" "%~dp0{obfuscated_script_path}" %*
+"%~dp0{PYTHON_DIR_NAME}\\python.exe" "%~dp0{obfuscated_script_path}" %*
 endlocal
 pause
 '''
@@ -728,13 +732,7 @@ pause
 
         # 7. Copy Assets
         queue_obj.put("--- Copying Assets ---\n")
-        for item in os.listdir(source_dir):
-            s, d = os.path.join(source_dir, item), os.path.join(dest_dir, item)
-            if not item.endswith('.py') and not item == '__pycache__':
-                if os.path.isdir(s):
-                    shutil.copytree(s, d, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(s, d)
+        shutil.copytree(source_dir, dest_dir, dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.py', '__pycache__'))
 
         # 8. Copy License File
         if license_path and os.path.exists(license_path):

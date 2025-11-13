@@ -43,7 +43,7 @@ class ObfuscatorApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         # Creazione del Notebook per le schede
-        self.notebook = ctk.CTkTabview(self, width=780, height=580)
+        self.notebook = ctk.CTkTabview(self)
         self.notebook.pack(expand=True, fill='both', padx=10, pady=10)
 
         # Creazione dei frame per le schede
@@ -790,11 +790,7 @@ def obfuscation_process(source_dir, dest_dir, license_path, requirements_path, q
             bat_path = os.path.join(dest_dir, f"{os.path.splitext(script_name)[0]}.bat")
 
             launcher_content = f'''@echo off
-setlocal
-echo Running: "%~dp0{PYTHON_DIR_NAME}\\python.exe" "%~dp0obfuscated\\{script_name}" %*
-"%~dp0{PYTHON_DIR_NAME}\\python.exe" "%~dp0obfuscated\\{script_name}" %*
-endlocal
-pause
+start "Launching GUI" /B "%~dp0{PYTHON_DIR_NAME}\\pythonw.exe" "%~dp0obfuscated\\{script_name}" %*
 '''
             with open(bat_path, 'w', encoding='utf-8') as f:
                 f.write(launcher_content)

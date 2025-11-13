@@ -25,7 +25,7 @@ class ObfuscatorApp(ctk.CTk):
         super().__init__()
         self.db = db_connection
         self.title("General Obfuscator and License Manager")
-        self.state('zoomed')
+        self.after(0, lambda: self.state('zoomed'))
 
         # Variabili per i percorsi e dati
         self.source_path = tk.StringVar()
@@ -790,7 +790,7 @@ def obfuscation_process(source_dir, dest_dir, license_path, requirements_path, q
             bat_path = os.path.join(dest_dir, f"{os.path.splitext(script_name)[0]}.bat")
 
             launcher_content = f'''@echo off
-start "Launching GUI" /B "%~dp0{PYTHON_DIR_NAME}\\pythonw.exe" "%~dp0obfuscated\\{script_name}" %*
+start "Launching GUI" "%~dp0{PYTHON_DIR_NAME}\\pythonw.exe" "%~dp0obfuscated\\{script_name}" %*
 '''
             with open(bat_path, 'w', encoding='utf-8') as f:
                 f.write(launcher_content)

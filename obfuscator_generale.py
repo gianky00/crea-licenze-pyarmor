@@ -188,6 +188,10 @@ class ObfuscatorApp(ctk.CTk):
             self.license_entry.insert(0, path)
             self.license_entry.configure(state="readonly")
 
+            info_path = os.path.join(os.path.dirname(path), "infoLicense.txt")
+            if os.path.exists(info_path):
+                self._update_status(f"Found and included infoLicense.txt\n")
+
     def select_requirements(self):
         path = filedialog.askopenfilename(
             title="Select requirements.txt",
@@ -256,6 +260,7 @@ class ObfuscatorApp(ctk.CTk):
     def start_license_generation(self):
         expiry = self.expiry_date.get()
         device_id = self.device_id.get()
+        selected_user_name = self.license_user_dropdown_var.get()
 
         if not self.selected_user_id_for_license:
             messagebox.showerror("Error", "Please select a user.")
@@ -265,9 +270,14 @@ class ObfuscatorApp(ctk.CTk):
             messagebox.showerror("Error", "Please provide both an expiry date and a device ID.")
             return
 
-        output_folder = filedialog.askdirectory(title="Select a folder to save the license key")
-        if not output_folder:
-            return
+        user_id, hwid, dest_path = self.user_data_map[selected_user_name]
+
+        output_folder = dest_path
+        if not output_folder or not os.path.isdir(output_folder):
+            messagebox.showinfo("Information", "No valid destination path set for this user. Please select a folder.")
+            output_folder = filedialog.askdirectory(title="Select a folder to save the license key")
+            if not output_folder:
+                return
 
         self.generate_license_button.configure(state='disabled')
         self.license_status_text.configure(state='normal')
@@ -275,7 +285,7 @@ class ObfuscatorApp(ctk.CTk):
         self.license_status_text.configure(state='disabled')
 
         # Pass the user ID to the generation process
-        thread = threading.Thread(target=self.license_generation_process, args=(expiry, device_id, output_folder, self.selected_user_id_for_license, self.license_queue))
+        thread = threading.Thread(target=self.license_generation_process, args=(expiry, device_id, output_folder, self.selected_user_id_for_license, selected_user_name, self.license_queue))
         thread.daemon = True
         thread.start()
         self.process_license_queue()
@@ -315,17 +325,17 @@ class ObfuscatorApp(ctk.CTk):
         controls_frame = ctk.CTkFrame(self.license_history_tab)
         controls_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        self.user_filter_var = ctk.StringVar(value="All Users")
-        self.user_filter_menu = ctk.CTkOptionMenu(controls_frame, variable=self.user_filter_var, values=["All Users"], command=self._on_user_filter_selected)
+        self.user_filter_var = ctk.StringVar(value="Tutti gli Utenti")
+        self.user_filter_menu = ctk.CTkOptionMenu(controls_frame, variable=self.user_filter_var, values=["Tutti gli Utenti"], command=self._on_user_filter_selected)
         self.user_filter_menu.pack(side="left", padx=5, pady=5)
 
-        ctk.CTkButton(controls_frame, text="Refresh History", command=self._refresh_license_history).pack(side="left", padx=5, pady=5)
-        ctk.CTkButton(controls_frame, text="Delete Selected", command=self._delete_selected_license, fg_color="red").pack(side="right", padx=5, pady=5)
+        ctk.CTkButton(controls_frame, text="Aggiorna Storico", command=self._refresh_license_history).pack(side="left", padx=5, pady=5)
+        ctk.CTkButton(controls_frame, text="Elimina Selezionato", command=self._delete_selected_license, fg_color="red").pack(side="right", padx=5, pady=5)
 
         self.history_status_label = ctk.CTkLabel(self.license_history_tab, text="", anchor="w")
         self.history_status_label.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
 
-        self.history_list_frame = ctk.CTkScrollableFrame(self.license_history_tab, label_text="Generated License History")
+        self.history_list_frame = ctk.CTkScrollableFrame(self.license_history_tab, label_text="Storico Licenze Generate")
         self.history_list_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
         self.history_list_frame.grid_columnconfigure(0, weight=1)
         self._refresh_license_history()
@@ -340,8 +350,8 @@ class ObfuscatorApp(ctk.CTk):
         users = self.db.get_all_users()
         user_names = ["Nessun utente selezionato"]
         if users:
-            for user_id, name, hwid in users:
-                self.user_data_map[name] = (user_id, hwid)
+            for user_id, name, hwid, dest_path in users:
+                self.user_data_map[name] = (user_id, hwid, dest_path)
                 user_names.append(name)
 
         # Update dropdowns in both tabs
@@ -352,7 +362,7 @@ class ObfuscatorApp(ctk.CTk):
 
     def _on_license_user_selected(self, selected_name):
         if selected_name in self.user_data_map:
-            user_id, hwid = self.user_data_map[selected_name]
+            user_id, hwid, dest_path = self.user_data_map[selected_name]
             self.selected_user_id_for_license = user_id
             self.device_id.set(hwid)
         else:
@@ -404,25 +414,29 @@ class ObfuscatorApp(ctk.CTk):
         header_frame.pack(fill="x", pady=(0, 5))
         header_frame.grid_columnconfigure(1, weight=1)
         header_frame.grid_columnconfigure(2, weight=1)
+        header_frame.grid_columnconfigure(3, weight=1)
 
         ctk.CTkLabel(header_frame, text="Seleziona", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=10)
         ctk.CTkLabel(header_frame, text="Nome Utente", font=ctk.CTkFont(weight="bold")).grid(row=0, column=1, padx=5, sticky="w")
         ctk.CTkLabel(header_frame, text="Serial N. Disco rigido", font=ctk.CTkFont(weight="bold")).grid(row=0, column=2, padx=5, sticky="w")
+        ctk.CTkLabel(header_frame, text="Percorso Destinazione", font=ctk.CTkFont(weight="bold")).grid(row=0, column=3, padx=5, sticky="w")
 
         if not all_users:
             ctk.CTkLabel(self.user_list_frame, text="Nessun utente registrato.").pack(pady=10)
             return
 
-        for user_id, name, hwid in all_users:
+        for user_id, name, hwid, dest_path in all_users:
             user_frame = ctk.CTkFrame(self.user_list_frame)
             user_frame.pack(fill="x", pady=2, padx=5)
             user_frame.grid_columnconfigure(1, weight=1)
             user_frame.grid_columnconfigure(2, weight=1)
+            user_frame.grid_columnconfigure(3, weight=1)
 
             radio_button = ctk.CTkRadioButton(user_frame, text="", variable=self.selected_user_for_edit, value=str(user_id))
             radio_button.grid(row=0, column=0, padx=10)
             ctk.CTkLabel(user_frame, text=name, anchor="w").grid(row=0, column=1, padx=5, sticky="ew")
             ctk.CTkLabel(user_frame, text=hwid, anchor="w").grid(row=0, column=2, padx=5, sticky="ew")
+            ctk.CTkLabel(user_frame, text=dest_path or "Non impostato", anchor="w").grid(row=0, column=3, padx=5, sticky="ew")
 
     def _open_add_edit_user_popup(self, edit_mode=False):
         user_id_to_edit = self.selected_user_for_edit.get()
@@ -455,15 +469,21 @@ class ObfuscatorApp(ctk.CTk):
         hwid_entry.pack(pady=5, padx=10)
         if user_data: hwid_entry.insert(0, user_data[2])
 
+        ctk.CTkLabel(popup, text="Percorso Destinazione:").pack()
+        dest_path_entry = ctk.CTkEntry(popup, width=300)
+        dest_path_entry.pack(pady=5, padx=10)
+        if user_data and user_data[3]: dest_path_entry.insert(0, user_data[3])
+
         def save_action():
             name = name_entry.get().strip()
             hwid = hwid_entry.get().strip()
+            dest_path = dest_path_entry.get().strip()
             if not name or not hwid: return
 
             if edit_mode:
-                success, msg = self.db.update_user(user_id_to_edit, name, hwid)
+                success, msg = self.db.update_user(user_id_to_edit, name, hwid, dest_path)
             else:
-                success, msg = self.db.add_user(name, hwid)
+                success, msg = self.db.add_user(name, hwid, dest_path)
 
             if success:
                 self.user_status_label.configure(text=msg, text_color="green")
@@ -501,10 +521,10 @@ class ObfuscatorApp(ctk.CTk):
 
         selected_user_name = self.user_filter_var.get()
         history_data = []
-        if selected_user_name == "All Users":
+        if selected_user_name == "Tutti gli Utenti":
             history_data = self.db.get_license_history()
         elif selected_user_name in self.user_data_map:
-            user_id, _ = self.user_data_map[selected_user_name]
+            user_id, _, _ = self.user_data_map[selected_user_name]
             history_data = self.db.get_license_history_by_user(user_id)
 
         header = ctk.CTkFrame(self.history_list_frame, fg_color=("gray85", "gray20"))
@@ -515,12 +535,12 @@ class ObfuscatorApp(ctk.CTk):
         header.grid_columnconfigure(3, weight=1) # Generated
 
         ctk.CTkLabel(header, text="", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=5, pady=2)
-        ctk.CTkLabel(header, text="Username", font=ctk.CTkFont(weight="bold")).grid(row=0, column=1, padx=5, pady=2, sticky="w")
-        ctk.CTkLabel(header, text="Expiry Date", font=ctk.CTkFont(weight="bold")).grid(row=0, column=2, padx=5, pady=2, sticky="w")
-        ctk.CTkLabel(header, text="Generation Date", font=ctk.CTkFont(weight="bold")).grid(row=0, column=3, padx=5, pady=2, sticky="w")
+        ctk.CTkLabel(header, text="Nome Utente", font=ctk.CTkFont(weight="bold")).grid(row=0, column=1, padx=5, pady=2, sticky="w")
+        ctk.CTkLabel(header, text="Data Scadenza", font=ctk.CTkFont(weight="bold")).grid(row=0, column=2, padx=5, pady=2, sticky="w")
+        ctk.CTkLabel(header, text="Data Generazione", font=ctk.CTkFont(weight="bold")).grid(row=0, column=3, padx=5, pady=2, sticky="w")
 
         if not history_data:
-            ctk.CTkLabel(self.history_list_frame, text="No licenses found in history.").pack(pady=10)
+            ctk.CTkLabel(self.history_list_frame, text="Nessuna licenza trovata nello storico.").pack(pady=10)
             return
 
         for i, (license_id, user_name, expiry_date, generation_date) in enumerate(history_data):
@@ -558,7 +578,7 @@ class ObfuscatorApp(ctk.CTk):
         else:
             self.history_status_label.configure(text="Deletion cancelled.", text_color="orange")
 
-    def license_generation_process(self, expiry_date, device_id, output_folder, user_id, queue_obj):
+    def license_generation_process(self, expiry_date, device_id, output_folder, user_id, user_name, queue_obj):
         try:
             queue_obj.put("--- Starting License Generation ---\n")
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", expiry_date):
@@ -591,6 +611,26 @@ class ObfuscatorApp(ctk.CTk):
             queue_obj.put(f"Final STDERR:\n{final_proc.stderr}\n")
 
             if success:
+                # Create infoLicense.txt
+                info_path = os.path.join(output_folder, "infoLicense.txt")
+                creation_date = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                expiry_date_formatted = datetime.datetime.strptime(expiry_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+
+                info_content = f"""
+============================================
+INFORMAZIONI LICENZA
+============================================
+Utenza: Hardware ID Associato:
+{user_name} {device_id}
+
+Data di Scadenza: Data creazione:
+{expiry_date_formatted} {creation_date}
+============================================
+"""
+                with open(info_path, 'w', encoding='utf-8') as f:
+                    f.write(info_content.strip())
+                queue_obj.put(f"Created infoLicense.txt at: {info_path}\n")
+
                 # Pass data back to the main thread to be added to the database
                 queue_obj.put(("ADD_LICENSE_RECORD", user_id, expiry_date))
                 queue_obj.put("\n--- SUCCESS! ---\nLicense key created. Recording to history...\n")
@@ -741,6 +781,11 @@ pause
             queue_obj.put("Copying license file...\n")
             shutil.copy(license_path, dest_dir)
             shutil.copy(license_path, obfuscated_dir)
+            info_path = os.path.join(os.path.dirname(license_path), "infoLicense.txt")
+            if os.path.exists(info_path):
+                shutil.copy(info_path, dest_dir)
+                shutil.copy(info_path, obfuscated_dir)
+                queue_obj.put("Copying infoLicense.txt...\n")
 
         queue_obj.put("\n====== OBFUSCATION COMPLETE ======\n")
         queue_obj.put(f"Package ready in: {dest_dir}\n")

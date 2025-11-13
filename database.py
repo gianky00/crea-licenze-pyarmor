@@ -22,9 +22,15 @@ class Database:
             CREATE TABLE IF NOT EXISTS utenti (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome_utente TEXT NOT NULL UNIQUE,
-                hwid_scheda_madre TEXT NOT NULL
+                hwid_scheda_madre TEXT NOT NULL,
+                percorso_destinazione TEXT
             )
         """)
+        try:
+            self.cursor.execute("ALTER TABLE utenti ADD COLUMN percorso_destinazione TEXT;")
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            pass # La colonna esiste già
 
         # Tabella per lo storico delle licenze generate
         self.cursor.execute("""
@@ -40,10 +46,10 @@ class Database:
 
     # --- Metodi per la gestione degli Utenti (CRUD) ---
 
-    def add_user(self, nome_utente, hwid_scheda_madre):
+    def add_user(self, nome_utente, hwid_scheda_madre, percorso_destinazione=None):
         """Aggiunge un nuovo utente nel database."""
         try:
-            self.cursor.execute("INSERT INTO utenti (nome_utente, hwid_scheda_madre) VALUES (?, ?)", (nome_utente, hwid_scheda_madre))
+            self.cursor.execute("INSERT INTO utenti (nome_utente, hwid_scheda_madre, percorso_destinazione) VALUES (?, ?, ?)", (nome_utente, hwid_scheda_madre, percorso_destinazione))
             self.conn.commit()
             return True, "Utente aggiunto con successo."
         except sqlite3.IntegrityError:
@@ -53,13 +59,13 @@ class Database:
 
     def get_all_users(self):
         """Restituisce tutti gli utenti dal database, ordinati per nome."""
-        self.cursor.execute("SELECT id, nome_utente, hwid_scheda_madre FROM utenti ORDER BY nome_utente")
+        self.cursor.execute("SELECT id, nome_utente, hwid_scheda_madre, percorso_destinazione FROM utenti ORDER BY nome_utente")
         return self.cursor.fetchall()
 
-    def update_user(self, user_id, new_nome_utente, new_hwid):
+    def update_user(self, user_id, new_nome_utente, new_hwid, new_percorso_destinazione):
         """Aggiorna i dati di un utente esistente."""
         try:
-            self.cursor.execute("UPDATE utenti SET nome_utente = ?, hwid_scheda_madre = ? WHERE id = ?", (new_nome_utente, new_hwid, user_id))
+            self.cursor.execute("UPDATE utenti SET nome_utente = ?, hwid_scheda_madre = ?, percorso_destinazione = ? WHERE id = ?", (new_nome_utente, new_hwid, new_percorso_destinazione, user_id))
             self.conn.commit()
             return True, "Utente aggiornato con successo."
         except sqlite3.IntegrityError:

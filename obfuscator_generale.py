@@ -109,7 +109,7 @@ class ObfuscatorApp(ctk.CTk):
 
     def create_obfuscator_tab(self):
         # Frame for source path selection
-        source_path_frame = ctk.CTkFrame(self.obfuscator_tab, pady=5)
+        source_path_frame = ctk.CTkFrame(self.obfuscator_tab)
         source_path_frame.pack(fill='x', padx=10, pady=(10,0))
         ctk.CTkLabel(source_path_frame, text="Source Folder:").pack(side='left')
         self.source_path_entry = ctk.CTkEntry(source_path_frame, textvariable=self.source_path, state='readonly', width=50)
@@ -118,7 +118,7 @@ class ObfuscatorApp(ctk.CTk):
         self.browse_source_button.pack(side='left')
 
         # Frame for destination path selection
-        dest_path_frame = ctk.CTkFrame(self.obfuscator_tab, pady=5)
+        dest_path_frame = ctk.CTkFrame(self.obfuscator_tab)
         dest_path_frame.pack(fill='x', padx=10, pady=(10,0))
         ctk.CTkLabel(dest_path_frame, text="Destination Folder:").pack(side='left')
         self.dest_path_entry = ctk.CTkEntry(dest_path_frame, textvariable=self.destination_path, state='readonly', width=50)
@@ -127,8 +127,8 @@ class ObfuscatorApp(ctk.CTk):
         self.browse_dest_button.pack(side='left')
 
         # Frame for license file selection
-        license_path_frame = ctk.CTkFrame(self.obfuscator_tab, pady=5)
-        license_path_frame.pack(fill='x', padx=10)
+        license_path_frame = ctk.CTkFrame(self.obfuscator_tab)
+        license_path_frame.pack(fill='x', padx=10, pady=5)
         ctk.CTkLabel(license_path_frame, text="License File (.lic):").pack(side='left')
         self.license_path_entry = ctk.CTkEntry(license_path_frame, textvariable=self.license_path, state='readonly', width=50)
         self.license_path_entry.pack(side='left', expand=True, fill='x', padx=5)
@@ -140,8 +140,8 @@ class ObfuscatorApp(ctk.CTk):
         self.start_button.pack(pady=10)
 
         # Status Area
-        status_frame = ctk.CTkFrame(self.obfuscator_tab, pady=10)
-        status_frame.pack(expand=True, fill='both', padx=10)
+        status_frame = ctk.CTkFrame(self.obfuscator_tab)
+        status_frame.pack(expand=True, fill='both', padx=10, pady=10)
         ctk.CTkLabel(status_frame, text="Status:").pack(anchor='w')
         self.status_text = ctk.CTkTextbox(status_frame, state='disabled', fg_color="black", text_color="white")
         self.status_text.pack(expand=True, fill='both')

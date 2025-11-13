@@ -692,6 +692,11 @@ Data di Scadenza:\t\tData creazione:
             queue_obj.put("\n4/7: Esecuzione di PyArmor per l'offuscamento...\n")
             self._run_pyarmor(build_dir, dest_dir, license_path, queue_obj)
 
+            if license_path:
+                queue_obj.put(f"Copia del file di licenza in {dest_dir}...\n")
+                shutil.copy(license_path, dest_dir)
+                queue_obj.put("File di licenza copiato.\n")
+
             queue_obj.put("\n5/7: Copia dell'ambiente Python nella destinazione finale...\n")
             shutil.copytree(python_embed_dir, os.path.join(dest_dir, "python_runtime"), dirs_exist_ok=True)
             queue_obj.put("Ambiente Python copiato.\n")
@@ -815,9 +820,6 @@ Data di Scadenza:\t\tData creazione:
         command = [
             "pyarmor", "gen", "--output", os.path.abspath(dest_dir)
         ]
-
-        if license_path:
-            command.extend(["--with-license", os.path.abspath(license_path)])
 
         command.extend(scripts_to_obfuscate)
 

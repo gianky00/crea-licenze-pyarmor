@@ -733,8 +733,8 @@ Data di Scadenza:\t\tData creazione:
 
     def _copy_source_files(self, source_dir, build_dir, queue_obj):
         excluded_patterns = [
-            'obfuscator_generale.py', 'license_manager.py', '*.db', '*.db-journal',
-            'database.py', 'avvio_gestionale.bat', 'cattura*.bat', '__pycache__', '*.spec', 'build', 'dist'
+            '.git', '__pycache__', 'obfuscator_generale.py', 'license_manager.py', '*.db', '*.db-journal',
+            'database.py', 'avvio_gestionale.bat', 'cattura*.bat', '*.spec', 'build', 'dist'
         ]
         for item in os.listdir(source_dir):
             source_item = os.path.join(source_dir, item)
@@ -813,7 +813,11 @@ Data di Scadenza:\t\tData creazione:
 
     def _run_pyarmor(self, build_dir, dest_dir, license_path, main_script, queue_obj):
         scripts_to_obfuscate = []
-        for root, _, files in os.walk(build_dir):
+        for root, dirs, files in os.walk(build_dir):
+            # Escludi la directory 'python_runtime' dalla ricerca
+            if 'python_runtime' in dirs:
+                dirs.remove('python_runtime')
+
             for file in files:
                 if file.endswith('.py'):
                     scripts_to_obfuscate.append(os.path.join(root, file))
@@ -827,7 +831,7 @@ Data di Scadenza:\t\tData creazione:
             scripts_to_obfuscate.insert(0, main_script_path)
 
         command = [
-            "pyarmor", "gen", "--output", os.path.abspath(dest_dir), "--outer"
+            "pyarmor", "gen", "--output", os.path.abspath(dest_dir), "--restrict"
         ]
 
         command.extend(scripts_to_obfuscate)

@@ -1,9 +1,0 @@
-============================================
-		INFORMAZIONI LICENZA
-============================================
-Utenza:			Hardware ID Associato:
-ISAB_SUD_ALLEGRETTI		ACE4_2E00_951D_4DDA
-
-Data di Scadenza:		Data creazione:
-13/01/2026		13/11/2025 12:05:54
-============================================

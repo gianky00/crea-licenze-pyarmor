@@ -135,6 +135,15 @@ class ObfuscatorApp(ctk.CTk):
         self.browse_license_button = ctk.CTkButton(license_path_frame, text="Browse...", command=self.select_license_file)
         self.browse_license_button.pack(side='left')
 
+        requirements_frame = ctk.CTkFrame(self.obfuscator_tab, fg_color="transparent")
+        requirements_frame.pack(fill='x', padx=20, pady=10)
+        requirements_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(requirements_frame, text="Requirements File (optional):").grid(row=0, column=0, sticky='w', padx=5)
+        self.requirements_entry = ctk.CTkEntry(requirements_frame, textvariable=self.requirements_path, state='readonly')
+        self.requirements_entry.grid(row=0, column=1, sticky='ew', padx=5)
+        self.browse_requirements_button = ctk.CTkButton(requirements_frame, text="Browse...", command=self.select_requirements, width=80)
+        self.browse_requirements_button.grid(row=0, column=2, padx=(5,0))
+
         # Start Button
         self.start_button = ctk.CTkButton(self.obfuscator_tab, text="Start Obfuscation", command=self.start_obfuscation, state='disabled')
         self.start_button.pack(pady=10)
@@ -177,6 +186,19 @@ class ObfuscatorApp(ctk.CTk):
             self.license_path.set(path)
             self._update_status(f"License file set to: {path}\n")
 
+    def select_requirements(self):
+        path = filedialog.askopenfilename(
+            title="Select requirements.txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        if path:
+            self.requirements_path.set(path)
+            self._update_status(f"Requirements file set to: {path}\n")
+            self.requirements_entry.configure(state="normal")
+            self.requirements_entry.delete(0, tk.END)
+            self.requirements_entry.insert(0, path)
+            self.requirements_entry.configure(state="readonly")
+
     def check_paths(self):
         if self.source_path.get() and self.destination_path.get():
             self.start_button.configure(state='normal')
@@ -184,7 +206,12 @@ class ObfuscatorApp(ctk.CTk):
             self.start_button.configure(state='disabled')
 
     def start_obfuscation(self):
-        if not self.source_path.get() or not self.destination_path.get():
+        source = self.source_path.get()
+        dest = self.destination_path.get()
+        license_f = self.license_path.get()
+        requirements_f = self.requirements_path.get()
+
+        if not source or not dest:
             messagebox.showerror("Error", "Please select both a source and destination folder.")
             return
 
@@ -192,14 +219,16 @@ class ObfuscatorApp(ctk.CTk):
         self.browse_source_button.configure(state='disabled')
         self.browse_dest_button.configure(state='disabled')
         self.browse_license_button.configure(state='disabled')
+        self.browse_requirements_button.configure(state='disabled')
+
         self.status_text.configure(state='normal')
         self.status_text.delete('1.0', tk.END)
         self.status_text.configure(state='disabled')
 
-        self.process_obfuscation_queue()
-        thread = threading.Thread(target=self._run_obfuscation_process)
+        thread = threading.Thread(target=self._run_obfuscation_process, args=(source, dest, license_f, requirements_f, self.obfuscation_queue))
         thread.daemon = True
         thread.start()
+        self.process_obfuscation_queue()
 
     def process_obfuscation_queue(self):
         try:
@@ -638,165 +667,146 @@ Data di Scadenza:\t\tData creazione:
             queue_obj.put(("LICENSE_PROCESS_COMPLETE",))
 
 
-    def _run_obfuscation_process(self):
+    def _run_obfuscation_process(self, source_dir, dest_dir, license_path, requirements_path, queue_obj):
+        PYTHON_VERSION = "3.10.11"
+        PYTHON_DOWNLOAD_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
+        PYTHON_DIR_NAME = "python-embed"
+        PIP_DOWNLOAD_URL = "https://bootstrap.pypa.io/get-pip.py"
+
         try:
-            build_dir = "build"
-            dest_dir = self.destination_path.get()
-            license_src_path = self.license_path.get()
-            main_script = "gui.py"
-            source_dir = self.source_path.get()
+            dest_dir = os.path.normpath(dest_dir)
+            source_dir = os.path.normpath(source_dir)
+            obfuscated_dir = os.path.join(dest_dir, "obfuscated")
+            python_embed_dir = os.path.join(dest_dir, PYTHON_DIR_NAME)
 
-            self.obfuscation_queue.put("Starting build process...\n")
+            queue_obj.put(f"--- Starting Obfuscation for Python {PYTHON_VERSION} ---\n")
 
-            # 1. Clean up and Create build directory
-            if os.path.exists(build_dir):
-                shutil.rmtree(build_dir)
-            os.makedirs(build_dir)
+            # 1. Clean and Create Directories
+            if os.path.exists(dest_dir):
+                queue_obj.put(f"Removing existing directory: {dest_dir}\n")
+                shutil.rmtree(dest_dir)
+            os.makedirs(obfuscated_dir)
+            os.makedirs(python_embed_dir)
 
-            # 2. Copy ALL files to build directory, excluding specified files
-            self.obfuscation_queue.put("Copying application files to temporary build directory...\n")
+            # 2. Download and Extract Python
+            with tempfile.TemporaryDirectory() as temp_dir:
+                zip_path = os.path.join(temp_dir, "python.zip")
+                queue_obj.put(f"Downloading Python from: {PYTHON_DOWNLOAD_URL}\n")
+                urllib.request.urlretrieve(PYTHON_DOWNLOAD_URL, zip_path)
+                with zipfile.ZipFile(zip_path, 'r') as z:
+                    z.extractall(python_embed_dir)
 
-            # List of files to exclude from the final package
-            excluded_files = [
-                'obfuscator_gui.py',
-                'license_manager.py',
-                'gestionale_licenze.db',
-                'database.py',
-                'avvio_gestionale.bat'
-            ]
+            python_exe = os.path.join(python_embed_dir, "python.exe")
+            if not os.path.exists(python_exe):
+                raise FileNotFoundError("python.exe not found.")
 
-            files_to_copy = glob.glob(os.path.join(source_dir, '*.*')) # Get all files initially
+            # 3. Configure Python Path (.pth file)
+            pth_file_path = os.path.join(python_embed_dir, f"python{PYTHON_VERSION.replace('.', '')[:3]}._pth")
+            queue_obj.put(f"Configuring Python path file at: {pth_file_path}\n")
+            with open(pth_file_path, 'w', encoding='utf-8') as f:
+                f.write(f"python{PYTHON_VERSION.replace('.', '')[:3]}.zip\n")
+                f.write(".\n")
+                f.write("Lib\\site-packages\n")
+                f.write("..\\obfuscated\n")
 
-            for f in files_to_copy:
-                filename = os.path.basename(f)
-                if filename not in excluded_files:
-                    try:
-                        shutil.copy(f, build_dir)
-                    except Exception as e:
-                        self.obfuscation_queue.put(f"Could not copy {filename}: {e}\n")
+            # 4. Install Dependencies if requirements.txt is provided
+            if requirements_path and os.path.exists(requirements_path):
+                queue_obj.put("\n--- Installing Dependencies ---\n")
+                get_pip_path = os.path.join(python_embed_dir, "get-pip.py")
+                queue_obj.put("Downloading get-pip.py...\n")
+                urllib.request.urlretrieve(PIP_DOWNLOAD_URL, get_pip_path)
+
+                queue_obj.put("Installing pip...\n")
+                pip_install_result = subprocess.run(
+                    [python_exe, get_pip_path],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='ignore'
+                )
+
+                if pip_install_result.returncode != 0:
+                    queue_obj.put(f"--- PIP INSTALLATION ERROR (get-pip.py) (Code: {pip_install_result.returncode}) ---\n")
+                    queue_obj.put(f"STDOUT:\n{pip_install_result.stdout}\n")
+                    queue_obj.put(f"STDERR:\n{pip_install_result.stderr}\n")
+                    raise RuntimeError("get-pip.py failed. Check the log for details.")
                 else:
-                    self.obfuscation_queue.put(f"Excluding: {filename}\n")
+                    queue_obj.put(f"STDOUT (get-pip.py):\n{pip_install_result.stdout}\n")
+                    queue_obj.put("Pip installed successfully.\n")
 
-            setup_dir_src = os.path.join(source_dir, 'file di setup')
-            if os.path.exists(setup_dir_src):
-                shutil.copytree(setup_dir_src, os.path.join(build_dir, 'file di setup'))
-            self.obfuscation_queue.put("All source files copied.\n")
+                pip_exe = os.path.join(python_embed_dir, "Scripts", "pip.exe")
+                queue_obj.put(f"Installing packages from: {requirements_path}\n")
 
-            # 3. Explicitly find and list ALL Python scripts to be obfuscated.
-            self.obfuscation_queue.put("Explicitly listing all Python scripts for obfuscation...\n")
-            all_scripts = [os.path.basename(f) for f in glob.glob(os.path.join(build_dir, '*.py'))]
+                result = subprocess.run(
+                    [pip_exe, "install", "-r", requirements_path],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='ignore'
+                )
 
-            if main_script in all_scripts:
-                all_scripts.insert(0, all_scripts.pop(all_scripts.index(main_script)))
+                if result.returncode != 0:
+                    queue_obj.put(f"--- PIP INSTALLATION ERROR (Code: {result.returncode}) ---\n")
+                    queue_obj.put(f"STDOUT:\n{result.stdout}\n")
+                    queue_obj.put(f"STDERR:\n{result.stderr}\n")
+                    raise RuntimeError("pip install failed. Check the log for details.")
+                else:
+                    queue_obj.put(f"STDOUT (Pip):\n{result.stdout}\n")
+                    queue_obj.put("--- Dependencies Installed ---\n")
 
-            if not all_scripts:
-                raise FileNotFoundError("No Python files found in build directory.")
+        # 5. Obfuscate with PyArmor
+        all_scripts = glob.glob(os.path.join(source_dir, '*.py'))
+        if not all_scripts:
+            raise FileNotFoundError("No Python files in source.")
 
-            self.obfuscation_queue.put(f"Scripts to be processed: {', '.join(all_scripts)}\n")
+        queue_obj.put("\n--- Running PyArmor ---\n")
+        command = ["pyarmor", "gen", "--outer", "--output", obfuscated_dir] + all_scripts
+        proc = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+        queue_obj.put(proc.stdout + "\n" + proc.stderr + "\n")
+        if proc.returncode != 0:
+            raise RuntimeError("PyArmor obfuscation failed.")
 
-            # 4. Obfuscate by passing the explicit list of all scripts.
-            self.obfuscation_queue.put("\n--- Running PyArmor ---\n")
-            command = [
-                "pyarmor", "gen",
-                "--outer",
-                "--output", os.path.abspath(dest_dir),
-            ]
-            command.extend(all_scripts)
+        # 6. Create Launchers
+        queue_obj.put("--- Creating .bat Launchers ---\n")
+        for script_path in all_scripts:
+            script_name = os.path.basename(script_path)
+            bat_path = os.path.join(dest_dir, f"{os.path.splitext(script_name)[0]}.bat")
 
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding='utf-8',
-                errors='ignore',
-                cwd=build_dir
-            )
-
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    self.obfuscation_queue.put(output.strip() + '\n')
-            rc = process.poll()
-            self.obfuscation_queue.put("--- PyArmor Finished ---\n\n")
-
-            if rc == 0:
-                self.obfuscation_queue.put("Obfuscation successful!\n")
-
-                # 5. Create a portable Python runtime for maximum compatibility
-                self.obfuscation_queue.put("Creating portable Python runtime...\n")
-                python_dir = os.path.dirname(sys.executable)
-
-                runtime_files = [
-                    'python.exe', 'pythonw.exe', 'python3.dll',
-                    f'python{sys.version_info.major}{sys.version_info.minor}.dll',
-                    'vcruntime140.dll', 'vcruntime140_1.dll'
-                ]
-
-                for filename in runtime_files:
-                    src_path = os.path.join(python_dir, filename)
-                    if os.path.exists(src_path):
-                        self.obfuscation_queue.put(f" - Copying {filename}...\n")
-                        shutil.copy(src_path, dest_dir)
-
-                # Copy essential subfolders for Python and Tkinter
-                for folder in ['DLLs', 'Lib', 'tcl']:
-                    src_path = os.path.join(python_dir, folder)
-                    dest_path = os.path.join(dest_dir, folder)
-                    if os.path.exists(src_path):
-                        self.obfuscation_queue.put(f" - Copying '{folder}' subfolder...\n")
-                        if os.path.exists(dest_path):
-                            shutil.rmtree(dest_path)
-                        shutil.copytree(src_path, dest_path)
-
-                self.obfuscation_queue.put("Portable runtime created.\n")
-
-                # 6. Copy non-Python assets
-                self.obfuscation_queue.put("Copying non-Python assets to final destination...\n")
-                for asset_file in glob.glob(os.path.join(build_dir, '*.*')):
-                    if not asset_file.endswith('.py'):
-                        shutil.copy(asset_file, dest_dir)
-
-                setup_dir_build = os.path.join(build_dir, 'file di setup')
-                setup_dir_dest = os.path.join(dest_dir, 'file di setup')
-                if os.path.exists(setup_dir_build):
-                    if os.path.exists(setup_dir_dest):
-                        shutil.rmtree(setup_dir_dest)
-                    shutil.copytree(setup_dir_build, setup_dir_dest)
-                self.obfuscation_queue.put("Assets copied.\n")
-
-                # 7. Copy license file
-                if license_src_path:
-                    self.obfuscation_queue.put(f"Copying license file to {dest_dir}...\n")
-                    shutil.copy(license_src_path, dest_dir)
-                    self.obfuscation_queue.put("License file copied.\n")
-
-                # 8. Create avvio.bat launcher
-                self.obfuscation_queue.put("Creating launcher script (avvio.bat)...\n")
-                launcher_path = os.path.join(dest_dir, 'avvio.bat')
-                launcher_content = f'''@echo off
-setlocal
-REM Change directory to the script's location
-cd /d %~dp0
-REM Run the application using the LOCAL python.exe
-.\\python.exe "{main_script}"
-endlocal
-pause
+            launcher_content = f'''@echo off
+start "Launching GUI" "%~dp0{PYTHON_DIR_NAME}\\pythonw.exe" "%~dp0obfuscated\\{script_name}" %*
 '''
-                with open(launcher_path, 'w', encoding='utf-8') as f:
-                    f.write(launcher_content)
-                self.obfuscation_queue.put("Launcher script created.\n")
-                self.obfuscation_queue.put(f"\nSUCCESS: Final application is ready in: {dest_dir}\n")
-            else:
-                self.obfuscation_queue.put(f"Error: PyArmor process returned error code {rc}.\n")
+            with open(bat_path, 'w', encoding='utf-8') as f:
+                f.write(launcher_content)
+            queue_obj.put(f"Created: {os.path.basename(bat_path)}\n")
 
-        except Exception as e:
-            self.obfuscation_queue.put(f"\nAn unexpected error occurred: {str(e)}\n")
-        finally:
-            self.obfuscation_queue.put(("PROCESS_COMPLETE",))
+        # 7. Copy Assets
+        queue_obj.put("--- Copying Assets ---\n")
+        for item in os.listdir(source_dir):
+            s, d = os.path.join(source_dir, item), os.path.join(dest_dir, item)
+            if not item.endswith('.py') and not item == '__pycache__':
+                if os.path.isdir(s):
+                    shutil.copytree(s, d, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(s, d)
+
+        # 8. Copy License File
+        if license_path and os.path.exists(license_path):
+            queue_obj.put("Copying license file...\n")
+            shutil.copy(license_path, dest_dir)
+            shutil.copy(license_path, obfuscated_dir)
+            info_path = os.path.join(os.path.dirname(license_path), "infoLicense.txt")
+            if os.path.exists(info_path):
+                shutil.copy(info_path, dest_dir)
+                shutil.copy(info_path, obfuscated_dir)
+                queue_obj.put("Copying infoLicense.txt...\n")
+
+        queue_obj.put("\n====== OBFUSCATION COMPLETE ======\n")
+        queue_obj.put(f"Package ready in: {dest_dir}\n")
+
+    except Exception as e:
+        queue_obj.put(f"\n--- AN ERROR OCCURRED ---\n{traceback.format_exc()}\n{str(e)}\n")
+    finally:
+        queue_obj.put(("PROCESS_COMPLETE",))
 
 if __name__ == "__main__":
     db_conn = None

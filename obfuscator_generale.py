@@ -25,7 +25,7 @@ class ObfuscatorApp(ctk.CTk):
         super().__init__()
         self.db = db_connection
         self.title("General Obfuscator and License Manager")
-        self.geometry("800x600")
+        self.state('zoomed')
 
         # Variabili per i percorsi e dati
         self.source_path = tk.StringVar()
@@ -92,8 +92,14 @@ class ObfuscatorApp(ctk.CTk):
         self.device_id_entry = ctk.CTkEntry(input_frame, textvariable=self.device_id, state="readonly")
         self.device_id_entry.grid(row=2, column=1, columnspan=2, sticky='ew', padx=5, pady=10)
 
-        self.generate_license_button = ctk.CTkButton(self.license_tab, text="Generate License Key", command=self.start_license_generation)
-        self.generate_license_button.pack(pady=20, padx=20)
+        action_frame = ctk.CTkFrame(self.license_tab, fg_color="transparent")
+        action_frame.pack(pady=20, padx=20)
+
+        self.generate_license_button = ctk.CTkButton(action_frame, text="Generate License Key", command=self.start_license_generation)
+        self.generate_license_button.pack(side="left", padx=10)
+
+        self.open_folder_button = ctk.CTkButton(action_frame, text="Apri Cartella Licenze", command=self.open_licenses_folder)
+        self.open_folder_button.pack(side="left", padx=10)
 
         license_status_frame = ctk.CTkFrame(self.license_tab, fg_color="transparent")
         license_status_frame.pack(expand=True, fill='both', padx=20, pady=10)
@@ -340,6 +346,15 @@ class ObfuscatorApp(ctk.CTk):
         self.history_list_frame.grid_columnconfigure(0, weight=1)
         self._refresh_license_history()
 
+    def open_licenses_folder(self):
+        base_license_path = "C:\\Users\\Coemi\\Desktop\\SCRIPT\\crea-licenze-pyarmor\\licenze"
+        try:
+            os.startfile(base_license_path)
+        except FileNotFoundError:
+            messagebox.showerror("Errore", f"La cartella non esiste:\n{base_license_path}")
+        except Exception as e:
+            messagebox.showerror("Errore", f"Impossibile aprire la cartella:\n{e}")
+
     def _refresh_all_user_views(self):
         self._refresh_user_dropdowns()
         self._refresh_user_list()
@@ -410,33 +425,42 @@ class ObfuscatorApp(ctk.CTk):
             widget.destroy()
 
         all_users = self.db.get_all_users()
-        header_frame = ctk.CTkFrame(self.user_list_frame, fg_color="transparent")
-        header_frame.pack(fill="x", pady=(0, 5))
+
+        # Main container for the list
+        list_container = ctk.CTkFrame(self.user_list_frame, fg_color="transparent")
+        list_container.pack(fill="x", expand=True)
+
+        # Configure columns for the grid layout in the main container
+        list_container.grid_columnconfigure(0, weight=0, minsize=80)  # Select
+        list_container.grid_columnconfigure(1, weight=1)             # Name
+        list_container.grid_columnconfigure(2, weight=1)             # HWID
+        list_container.grid_columnconfigure(3, weight=2)             # Path
+
+        # Header
+        header_frame = ctk.CTkFrame(list_container, fg_color="transparent")
+        header_frame.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 5))
+        header_frame.grid_columnconfigure(0, weight=0, minsize=80)
         header_frame.grid_columnconfigure(1, weight=1)
         header_frame.grid_columnconfigure(2, weight=1)
-        header_frame.grid_columnconfigure(3, weight=1)
+        header_frame.grid_columnconfigure(3, weight=2)
 
-        ctk.CTkLabel(header_frame, text="Seleziona", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=10)
+        ctk.CTkLabel(header_frame, text="Seleziona", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=10, sticky="w")
         ctk.CTkLabel(header_frame, text="Nome Utente", font=ctk.CTkFont(weight="bold")).grid(row=0, column=1, padx=5, sticky="w")
         ctk.CTkLabel(header_frame, text="Serial N. Disco rigido", font=ctk.CTkFont(weight="bold")).grid(row=0, column=2, padx=5, sticky="w")
         ctk.CTkLabel(header_frame, text="Percorso Destinazione", font=ctk.CTkFont(weight="bold")).grid(row=0, column=3, padx=5, sticky="w")
 
         if not all_users:
-            ctk.CTkLabel(self.user_list_frame, text="Nessun utente registrato.").pack(pady=10)
+            ctk.CTkLabel(list_container, text="Nessun utente registrato.").grid(row=1, column=0, columnspan=4, pady=10)
             return
 
-        for user_id, name, hwid, dest_path in all_users:
-            user_frame = ctk.CTkFrame(self.user_list_frame)
-            user_frame.pack(fill="x", pady=2, padx=5)
-            user_frame.grid_columnconfigure(1, weight=1)
-            user_frame.grid_columnconfigure(2, weight=1)
-            user_frame.grid_columnconfigure(3, weight=1)
+        for i, (user_id, name, hwid, dest_path) in enumerate(all_users):
+            row_index = i + 1
+            radio_button = ctk.CTkRadioButton(list_container, text="", variable=self.selected_user_for_edit, value=str(user_id))
+            radio_button.grid(row=row_index, column=0, padx=10, pady=5, sticky="w")
 
-            radio_button = ctk.CTkRadioButton(user_frame, text="", variable=self.selected_user_for_edit, value=str(user_id))
-            radio_button.grid(row=0, column=0, padx=10)
-            ctk.CTkLabel(user_frame, text=name, anchor="w").grid(row=0, column=1, padx=5, sticky="ew")
-            ctk.CTkLabel(user_frame, text=hwid, anchor="w").grid(row=0, column=2, padx=5, sticky="ew")
-            ctk.CTkLabel(user_frame, text=dest_path or "Non impostato", anchor="w").grid(row=0, column=3, padx=5, sticky="ew")
+            ctk.CTkLabel(list_container, text=name, anchor="w").grid(row=row_index, column=1, padx=5, pady=5, sticky="ew")
+            ctk.CTkLabel(list_container, text=hwid, anchor="w").grid(row=row_index, column=2, padx=5, pady=5, sticky="ew")
+            ctk.CTkLabel(list_container, text=dest_path or "Non impostato", anchor="w").grid(row=row_index, column=3, padx=5, pady=5, sticky="ew")
 
     def _open_add_edit_user_popup(self, edit_mode=False):
         user_id_to_edit = self.selected_user_for_edit.get()
@@ -483,6 +507,16 @@ class ObfuscatorApp(ctk.CTk):
             if edit_mode:
                 success, msg = self.db.update_user(user_id_to_edit, name, hwid, dest_path)
             else:
+                # Automatic folder creation and path assignment
+                base_license_path = "C:\\Users\\Coemi\\Desktop\\SCRIPT\\crea-licenze-pyarmor\\licenze"
+                user_folder = os.path.join(base_license_path, name)
+                try:
+                    os.makedirs(user_folder, exist_ok=True)
+                    dest_path = user_folder
+                except OSError as e:
+                    messagebox.showerror("Errore Creazione Cartella", f"Impossibile creare la cartella per l'utente:\n{e}")
+                    return
+
                 success, msg = self.db.add_user(name, hwid, dest_path)
 
             if success:
@@ -618,13 +652,13 @@ class ObfuscatorApp(ctk.CTk):
 
                 info_content = f"""
 ============================================
-INFORMAZIONI LICENZA
+\t\tINFORMAZIONI LICENZA
 ============================================
-Utenza: Hardware ID Associato:
-{user_name} {device_id}
+Utenza:\t\t\tHardware ID Associato:
+{user_name}\t\t{device_id}
 
-Data di Scadenza: Data creazione:
-{expiry_date_formatted} {creation_date}
+Data di Scadenza:\t\tData creazione:
+{expiry_date_formatted}\t\t{creation_date}
 ============================================
 """
                 with open(info_path, 'w', encoding='utf-8') as f:

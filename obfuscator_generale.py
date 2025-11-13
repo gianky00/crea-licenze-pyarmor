@@ -707,6 +707,17 @@ def obfuscation_process(source_dir, dest_dir, license_path, requirements_path, q
             with zipfile.ZipFile(zip_path, 'r') as z:
                 z.extractall(python_embed_dir)
 
+        # 2.5. Copy VC++ Runtime DLLs to make the package portable
+        queue_obj.put("--- Copying VC++ Runtime DLLs for portability ---\n")
+        dlls_to_copy = glob.glob(os.path.join(python_embed_dir, "vcruntime*.dll"))
+        if not dlls_to_copy:
+            queue_obj.put("WARNING: No VC++ runtime DLLs found in the Python package. The application might not be portable.\n")
+        else:
+            for dll_path in dlls_to_copy:
+                dll_name = os.path.basename(dll_path)
+                shutil.copy2(dll_path, dest_dir)
+                queue_obj.put(f"Copied {dll_name} to {dest_dir}\n")
+
         python_exe = os.path.join(python_embed_dir, "python.exe")
         if not os.path.exists(python_exe):
             raise FileNotFoundError("python.exe not found.")

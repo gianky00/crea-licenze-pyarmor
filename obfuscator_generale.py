@@ -670,7 +670,13 @@ Data di Scadenza:\t\tData creazione:
     def _run_obfuscation_process(self, source_dir, dest_dir, license_path, requirements_path, queue_obj):
         build_dir = os.path.join(tempfile.gettempdir(), f"obfuscator_build_{int(time.time())}")
         try:
-            main_script = "gui.py"
+            # Detect main script
+            if os.path.exists(os.path.join(source_dir, "main.py")):
+                main_script = "main.py"
+            elif os.path.exists(os.path.join(source_dir, "gui.py")):
+                main_script = "gui.py"
+            else:
+                raise FileNotFoundError("Script principale ('main.py' o 'gui.py') non trovato.")
 
             queue_obj.put("--- Inizio del Processo di Offuscamento ---\n")
             queue_obj.put(f"Directory di build temporanea: {build_dir}\n")
@@ -690,7 +696,7 @@ Data di Scadenza:\t\tData creazione:
                 queue_obj.put("\n3/7: Nessun file requirements.txt fornito, saltato.\n")
 
             queue_obj.put("\n4/7: Esecuzione di PyArmor per l'offuscamento...\n")
-            self._run_pyarmor(build_dir, dest_dir, license_path, queue_obj)
+            self._run_pyarmor(build_dir, dest_dir, license_path, main_script, queue_obj)
 
             if license_path:
                 queue_obj.put(f"Copia del file di licenza in {dest_dir}...\n")
@@ -805,20 +811,23 @@ Data di Scadenza:\t\tData creazione:
             queue_obj.put(e.stderr)
             raise
 
-    def _run_pyarmor(self, build_dir, dest_dir, license_path, queue_obj):
-        scripts_to_obfuscate = [f for f in glob.glob(os.path.join(build_dir, '*.py'))]
+    def _run_pyarmor(self, build_dir, dest_dir, license_path, main_script, queue_obj):
+        scripts_to_obfuscate = []
+        for root, _, files in os.walk(build_dir):
+            for file in files:
+                if file.endswith('.py'):
+                    scripts_to_obfuscate.append(os.path.join(root, file))
 
         if not scripts_to_obfuscate:
             raise FileNotFoundError("Nessun file Python da offuscare trovato nella directory di build.")
 
-        main_script = "gui.py"
         main_script_path = os.path.join(build_dir, main_script)
         if main_script_path in scripts_to_obfuscate:
             scripts_to_obfuscate.remove(main_script_path)
             scripts_to_obfuscate.insert(0, main_script_path)
 
         command = [
-            "pyarmor", "gen", "--output", os.path.abspath(dest_dir)
+            "pyarmor", "gen", "--output", os.path.abspath(dest_dir), "--outer"
         ]
 
         command.extend(scripts_to_obfuscate)

@@ -147,7 +147,72 @@ class Database:
 
 if __name__ == '__main__':
     # Esempio di utilizzo e test delle funzionalità
-    db = Database()
+    db = Database("test_gestionale.db")
     print("Database e tabelle create.")
+
+    # Aggiunta utenti
+    print(db.add_user("Cliente Prova 1", "HWID-001"))
+    print(db.add_user("Altro Cliente", "HWID-002"))
+    print(db.add_user("Cliente Prova 1", "HWID-003")) # Test duplicato
+
+    # Lettura utenti
+    print("\nUtenti nel database:")
+    users = db.get_all_users()
+    for user in users:
+        print(user)
+
+    # Aggiornamento utente
+    if users:
+        user_id_to_update = users[0][0] # ID del primo utente
+        print(f"\nAggiornamento utente ID {user_id_to_update}...")
+        print(db.update_user(user_id_to_update, "Cliente Prova 1 Modificato", "HWID-001-NEW"))
+
+    # Lettura utenti dopo aggiornamento
+    print("\nUtenti dopo l'aggiornamento:")
+    users = db.get_all_users()
+    for user in users:
+        print(user)
+
+    # Aggiunta record licenze
+    if users:
+        user_id_license_1 = users[0][0]
+        user_id_license_2 = users[1][0]
+        print("\nAggiunta record licenze...")
+        print(db.add_license_record(user_id_license_1, "31/12/2024"))
+        import time; time.sleep(1) # Per avere timestamp diversi
+        print(db.add_license_record(user_id_license_2, "15/06/2025"))
+
+    # Lettura storico licenze
+    print("\nStorico licenze generate:")
+    history = db.get_license_history()
+    for record in history:
+        print(record)
+
+    # Eliminazione utente
+    if users:
+        user_id_to_delete = users[1][0] # ID del secondo utente
+        print(f"\nEliminazione utente ID {user_id_to_delete}...")
+        print(db.delete_user(user_id_to_delete))
+        # La licenza associata dovrebbe essere rimossa per via del ON DELETE CASCADE
+
+    # Lettura utenti finali
+    print("\nUtenti finali:")
+    users = db.get_all_users()
+    for user in users:
+        print(user)
+
+    # Lettura storico finale
+    print("\nStorico licenze finale:")
+    history = db.get_license_history()
+    for record in history:
+        print(record)
+
+
+    # Chiusura connessione
     db.close()
     print("\nConnessione chiusa.")
+
+    # Rimuovi il database di test
+    import os
+    os.remove("test_gestionale.db")
+    print("Database di test rimosso.")
